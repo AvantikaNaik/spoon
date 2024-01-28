@@ -102,6 +102,9 @@ class Game:
         # Check if game is over
         if self.gs.health[Team.BLUE] == 0 or self.gs.health[Team.RED] == 0:
             return self.calculate_winner()
+        # Use this to see how long RED can survive
+        # if  self.gs.health[Team.RED] == 0:
+        #     return self.calculate_winner()
         
         # Add time to each player
         self.gs.time_remaining[Team.BLUE] += GameConstants.ADDITIONAL_TIME_PER_TURN
