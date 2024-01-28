@@ -12,25 +12,25 @@ class BotPlayer(Player):
     
     def play_turn(self, rc: RobotController):
         corners = self.identify_corners(self.map.path)
-        print(corners)
+        tower_points = []
+        for c in corners:
+            pot_tower_point = self.get_inner_point(corners[c][0], corners[c][1], c)
+            tower_points.append(pot_tower_point)
         self.build_towers(rc)
         self.towers_attack(rc)
 
-    def get_path_coordinates(self):
-        coords = []
-        for x in range(self.map.width):
-            for y in range(self.map.height):
-                if self.map.is_path(x, y):
-                    coords.append((x, y))
-        return coords
+    def get_inner_point(self, p1, p2, p3):
+        X = p1[0]^ p2[0] ^ p3[0]
+        Y = p1[1]^ p2[1] ^ p3[1]
+        return (X,Y)
 
     def identify_corners(self, points):
-        corners = []
+        corners = {}
         #print(sorted_by_x)
         for i in range(2, len(points)):
             #diff x diff y:
             if (points[i][0] != points[i - 2][0] and points[i][1] !=points[i - 2][1]):
-                corners.append(points[i-1])
+                corners[points[i-1]] = [points[i], points[i-2]]
         return corners
     
     def build_towers(self, rc: RobotController):
