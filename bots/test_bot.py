@@ -7,33 +7,41 @@ from src.tower import Tower
 import random
 from collections import deque
 
+DEBUG = False
+
 class BotPlayer(Player):
     def __init__(self, map: Map):
         self.map = map
         self.next_coords = deque()
         self.corners = self.identify_corners(self.map.path)
-        for c in self.corners:
+        corners = list(self.corners.keys())
+        if len(corners) > 10:
+            corners = random.sample(corners, 10)
+        for c in corners:
             pot_tower_point = self.get_inner_point(self.corners[c][0], self.corners[c][1], c)
             self.next_coords.append((pot_tower_point, TowerType.BOMBER, 0))
         
     def add_neighbors(self, coords: tuple[int, int], tower: TowerType, depth: int, rc: RobotController):
-        if depth < 4:
+        if depth < 2:
             for x in range(coords[0]-1, coords[0]+2):
                 for y in range(coords[1]-1, coords[1]+2):
                     if (x,y) != coords:
                         if tower == TowerType.BOMBER:
-                            newtower = random.choice([TowerType.GUNSHIP, TowerType.GUNSHIP, TowerType.GUNSHIP, TowerType.REINFORCER, TowerType.REINFORCER])
+                            newtower = random.choice([TowerType.GUNSHIP, TowerType.GUNSHIP, TowerType.GUNSHIP, TowerType.REINFORCER, TowerType.REINFORCER, TowerType.SOLAR_FARM])
                         elif tower == TowerType.GUNSHIP:
-                            newtower = random.choice([TowerType.BOMBER, TowerType.BOMBER, TowerType.SOLAR_FARM, TowerType.GUNSHIP, TowerType.REINFORCER])
+                            newtower = random.choice([TowerType.BOMBER, TowerType.BOMBER, TowerType.SOLAR_FARM, TowerType.GUNSHIP, TowerType.REINFORCER, TowerType.REINFORCER])
                         else:
                             continue 
                         if newtower == TowerType.SOLAR_FARM:
-                            x = random.randint(0, self.map.height-1)
-                            y = random.randint(0, self.map.height-1)
-                            depth = 0
+                            xs = random.randint(0, self.map.height-1)
+                            ys = random.randint(0, self.map.height-1)
+                            self.next_coords.append(((xs,ys), newtower, 0))
+                            continue
                         self.next_coords.append(((x,y), newtower, depth+1))
         else:
             newCoords = self.get_random_edge(rc)
+            if DEBUG:
+                print("random edge", newCoords)
             if newCoords:
                 self.next_coords.append((newCoords, TowerType.BOMBER, 0))
         
@@ -50,7 +58,6 @@ class BotPlayer(Player):
 
     def identify_corners(self, points):
         corners = {}
-        #print(sorted_by_x)
         for i in range(2, len(points)):
             #diff x diff y:
             if (points[i][0] != points[i - 2][0] and points[i][1] !=points[i - 2][1]):
@@ -66,41 +73,44 @@ class BotPlayer(Player):
         return None
     
     def rush_debris(self, rc: RobotController):
+        if DEBUG:
+            print("RUSHING DEBRIS")
         while rc.can_send_debris(1, 50):
             rc.send_debris(1, 50)
         
     def build_towers(self, rc: RobotController):
         # print(self.next_coords)
         timeout = 10
-        if rc.get_turn() < 10 or random.randint(0, 200) == 0:
+        if rc.get_turn() < 10 or random.randint(0, 500) == 0:
             self.rush_debris(rc)
         while len(self.next_coords) > 0 and timeout > 0:
-            coords, tower, depth = self.next_coords.popleft()
+            if random.randint(0,100) == 0:
+                if DEBUG:
+                    print("promoting random tower")
+                idx = random.randint(0, len(self.next_coords)-1)
+                coords, tower, depth = self.next_coords[idx]
+                del self.next_coords[idx]
+            else:
+                coords, tower, depth = self.next_coords.popleft()
             if rc.get_balance(rc.get_ally_team()) < tower.cost:
                 self.next_coords.appendleft((coords, tower, depth))
                 return
             if rc.can_build_tower(tower, coords[0], coords[1]):
+                if DEBUG:
+                    print("building tower", tower, "at", coords, "depth", depth)
                 rc.build_tower(tower, coords[0], coords[1])
                 self.add_neighbors(coords, tower, depth, rc)
                 return
             timeout -= 1
         
-        x = random.randint(0, self.map.height-1)
-        y = random.randint(0, self.map.height-1)
-        tower = random.randint(1, 4) # randomly select a tower
+        x,y = self.get_random_edge(rc)
+        tower = random.choice([TowerType.GUNSHIP, TowerType.BOMBER, TowerType.REINFORCER])
         if (rc.can_build_tower(TowerType.GUNSHIP, x, y) and 
             rc.can_build_tower(TowerType.BOMBER, x, y) and
-            rc.can_build_tower(TowerType.SOLAR_FARM, x, y) and
             rc.can_build_tower(TowerType.REINFORCER, x, y)
         ):
-            if tower == 1:
-                rc.build_tower(TowerType.BOMBER, x, y)
-            elif tower == 2:
-                rc.build_tower(TowerType.GUNSHIP, x, y)
-            elif tower == 3:
-                rc.build_tower(TowerType.SOLAR_FARM, x, y)
-            elif tower == 4:
-                rc.build_tower(TowerType.REINFORCER, x, y)
+            rc.build_tower(tower, x, y)
+            self.add_neighbors((x,y), tower, 0, rc)
     
     def towers_attack(self, rc: RobotController):
         towers = rc.get_towers(rc.get_ally_team())
